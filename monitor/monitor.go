@@ -4,31 +4,31 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"sync"
-
 	"math/big"
+	"sync"
 
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/hemi519/uniswap_monitor/datastore"
 )
 
 type EthereumClient interface {
-	SubscribeNewHead(ctx context.Context, ch chan<- *types.Header) (EthereumSubscription, error)
+	SubscribeNewHead(ctx context.Context, ch chan<- *types.Header) (Subscription, error)
+	Context() context.Context
 }
 
-type EthereumSubscription interface {
+type Subscription interface {
 	Err() <-chan error
-	Unsubscribe()
+	Unsubscribe() bool
 }
 
 type Header struct {
 	Number *big.Int
-
 	// Add other required fields
 }
 
 type PoolConfig struct {
 	Address string
+	PoolID  string
 	// Add other required fields
 }
 
@@ -50,7 +50,7 @@ func (m *UniswapMonitor) StartMonitoring() {
 	log.Println("Starting Uniswap monitoring...")
 
 	headers := make(chan *types.Header)
-	sub, err := m.client.SubscribeNewHead(context.Background(), headers)
+	sub, err := m.client.SubscribeNewHead(m.client.Context(), headers)
 	if err != nil {
 		log.Fatalf("Failed to subscribe to new headers: %v", err)
 	}
@@ -71,9 +71,7 @@ func (m *UniswapMonitor) processHeaders(headers <-chan *types.Header, wg *sync.W
 
 		// Fetch and calculate the required data points for each pool
 		for _, pool := range m.pools {
-			//	token0Balance, token1Balance, tick, err := m.fetchDataPoints(pool.Address, blockNumber)
 			_, _, _, err := m.fetchDataPoints(pool.Address, blockNumber)
-
 			if err != nil {
 				log.Printf("Failed to fetch data points for pool %s: %v", pool.Address, err)
 				continue
@@ -99,8 +97,9 @@ func (m *UniswapMonitor) fetchDataPoints(poolAddress string, blockNumber *big.In
 }
 
 func (m *UniswapMonitor) GetBalances(poolAddress string, blockNumber *big.Int) (token0Balance, token1Balance *big.Int, tick int64, err error) {
-	// Retrieve the balances and tick from the datastore based on the pool address and block number
-	// Implement the logic to fetch the required data points from the datastore
-	// Return the retrieved balances and tick, along with any potential errors
-	return nil, nil, 0, nil
+	// Retrieve the balances and tick from the datastore based on
+	// the provided pool address and block number
+	// Implement the logic to fetch the data from the datastore
+	// Return the balances, tick, and any potential errors
+	return nil, nil, 0, fmt.Errorf("GetBalances not implemented")
 }

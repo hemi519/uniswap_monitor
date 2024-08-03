@@ -1,49 +1,75 @@
 package main
 
 import (
+	"context"
 	"log"
-	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/gorilla/mux"
 	"github.com/hemi519/uniswap_monitor/datastore"
-	"github.com/hemi519/uniswap_monitor/middleware"
 	"github.com/hemi519/uniswap_monitor/monitor"
 )
 
-const apiKey = "d890adccbc6d4fec887c8d0f23f5e5b7"
+type EthClientWrapper struct {
+	client *ethclient.Client
+}
+
+type EthSubscriptionWrapper struct {
+	sub ethereum.Subscription
+}
+
+func (ew *EthClientWrapper) SubscribeNewHead(ch chan<- *monitor.Header) (monitor.Subscription, error) {
+	sub, err := ew.client.SubscribeNewHead(context.Background(), ch)
+	if err != nil {
+		return nil, err
+	}
+	return &EthSubscriptionWrapper{sub: sub}, nil
+}
+
+func (ew *EthClientWrapper) Context() context.Context {
+	return context.Background()
+}
+
+func (esw *EthSubscriptionWrapper) Unsubscribe() {
+	esw.sub.Unsubscribe()
+}
 
 func main() {
 	// Create an Ethereum client
-	client, err := ethclient.Dial("https://mainnet.infura.io/v3/YOUR_INFURA_PROJECT_ID")
+	ethereumClient, err := ethclient.Dial("https://mainnet.infura.io/v3/YOUR_INFURA_PROJECT_ID")
 	if err != nil {
 		log.Fatalf("Failed to connect to the Ethereum client: %v", err)
 	}
 
-	// Define the pool configurations
+	// Create a data store (replace with your preferred data store implementation)
+	datastore := datastore.NewMyDatastore()
+
+	// Define the pools to monitor
 	pools := []monitor.PoolConfig{
-		{PoolID: "0xPOOL_ADDRESS"},
-		// Add more pools as required
+		{
+			Address: "0xPOOL_ADDRESS_1",
+		},
+		{
+			Address: "0xPOOL_ADDRESS_2",
+		},
+		// Add more pool addresses as needed
 	}
 
-	// Create a datastore instance
-	datastore := datastore.NewDatastore()
-
 	// Create an instance of the UniswapMonitor
-	uniswapMonitor := monitor.NewUniswapMonitor(client, pools, datastore)
+	uniswapMonitor := monitor.NewUniswapMonitor(&EthClientWrapper{ethereumClient}, pools, datastore)
 
-	// Start monitoring the pools
-	uniswapMonitor.StartMonitoring()
+	// Start monitoring
+	go uniswapMonitor.StartMonitoring()
 
-	// Set up the REST API
-	router := mux.NewRouter()
+	// Wait for termination signal to gracefully shutdown
+	waitForTerminationSignal()
+}
 
-	// Apply logging middleware to all API routes
-	router.Use(middleware.LoggingMiddleware)
-
-	// Define API routes
-	router.HandleFunc("/v1/api/pool/{pool_id}", uniswapMonitor.GetPoolData).Methods("GET")
-
-	// Start the HTTP server
-	log.Fatal(http.ListenAndServe(":8080", router))
+func waitForTerminationSignal() {
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	<-sigCh
 }
